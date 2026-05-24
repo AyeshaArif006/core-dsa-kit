@@ -1,0 +1,225 @@
+#include <iostream>
+#include <ctime>
+#include <cstdlib>
+#include <vector>
+#include <iomanip>
+using namespace std;
+
+struct Node {
+    int data;
+    Node* left;
+    Node* right;
+    Node(int val) : data(val), left(nullptr), right(nullptr) {}
+};
+
+class BST {
+private:
+    Node* root;
+
+    Node* insertRec(Node* node, int val) {
+        if (!node) return new Node(val);
+        if (val < node->data)       node->left  = insertRec(node->left,  val);
+        else if (val > node->data)  node->right = insertRec(node->right, val);
+
+        return node;
+    }
+
+    void inorderRec(Node* node, vector<int>& result) {
+        if (!node) return;
+        inorderRec(node->left, result);
+        result.push_back(node->data);
+        inorderRec(node->right, result);
+    }
+
+    bool searchRec(Node* node, int val) {
+        if (!node) return false;
+        if (val == node->data) return true;
+        if (val < node->data) return searchRec(node->left, val);
+        return searchRec(node->right, val);
+    }
+
+    Node* findMin(Node* node) {
+        while (node->left) node = node->left;
+        return node;
+    }
+
+    Node* deleteRec(Node* node, int val) {
+        if (!node) return nullptr;
+        if (val < node->data) {
+            node->left = deleteRec(node->left, val);
+        } else if (val > node->data) {
+            node->right = deleteRec(node->right, val);
+        } else {
+            if (!node->left) {
+                Node* tmp = node->right;
+                delete node;
+                return tmp;
+            } else if (!node->right) {
+                Node* tmp = node->left;
+                delete node;
+                return tmp;
+            }
+
+            Node* successor = findMin(node->right);
+            node->data = successor->data;
+            node->right = deleteRec(node->right, successor->data);
+        }
+        return node;
+    }
+
+    void destroyRec(Node* node) {
+        if (!node) return;
+        destroyRec(node->left);
+        destroyRec(node->right);
+        delete node;
+    }
+
+public:
+    BST() : root(nullptr) {}
+    ~BST() { destroyRec(root); }
+
+    void insert(int val) {
+        root = insertRec(root, val);
+    }
+
+    vector<int> inorder() {
+        vector<int> result;
+        inorderRec(root, result);
+        return result;
+    }
+
+    bool search(int val) {
+        return searchRec(root, val);
+    }
+
+    void remove(int val) {
+        root = deleteRec(root, val);
+    }
+
+    bool isEmpty() { return root == nullptr; }
+};
+
+
+long long getTimeNs() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+
+void printSeparator(char c = '-', int len = 62) {
+    for (int i = 0; i < len; i++) cout << c;
+    cout << endl;
+}
+
+int main() {
+    srand(time(0));
+
+    cout << "============================================================" << endl;
+    cout << "                      BINARY SEARCH TREE                    " << endl;
+    cout << "============================================================" << endl;
+
+    
+    cout << "\n--- BST Demonstration ---" << endl;
+    BST demo;
+
+    int demoVals[] = {50, 30, 70, 20, 40, 60, 80, 10, 25, 35, 45};
+    int demoSize = sizeof(demoVals) / sizeof(demoVals[0]);
+
+    cout << "Inserting: ";
+    for (int i = 0; i < demoSize; i++) {
+        cout << demoVals[i];
+        if (i < demoSize-1) cout << " ";
+        demo.insert(demoVals[i]);
+    }
+    cout << endl;
+
+    vector<int> sorted = demo.inorder();
+    cout << "Inorder traversal (sorted): ";
+    for (int i = 0; i < (int)sorted.size(); i++) {
+        cout << sorted[i];
+        if (i < (int)sorted.size()-1) cout << " ";
+    }
+    cout << endl;
+
+    cout << "Search 40: " << (demo.search(40) ? "Found" : "Not Found") << endl;
+    cout << "Search 99: " << (demo.search(99) ? "Found" : "Not Found") << endl;
+
+    cout << "Deleting leaf node 10..." << endl;
+    demo.remove(10);
+    cout << "Deleting node with one child: 20..." << endl;
+    demo.remove(20);
+    cout << "Deleting node with two children: 30..." << endl;
+    demo.remove(30);
+
+    sorted = demo.inorder();
+    cout << "Inorder after deletions (still sorted): ";
+    for (int i = 0; i < (int)sorted.size(); i++) {
+        cout << sorted[i];
+        if (i < (int)sorted.size()-1) cout << " ";
+    }
+    cout << endl;
+
+    // ===== TIMING: 5 Sets of 100 Random Numbers =====
+    cout << "\n";
+    printSeparator('=');
+    cout << "  BST TIMING DRIVER - 5 Sets of 100 Random Nums" << endl;
+    printSeparator('=');
+
+    const int SETS = 5;
+    const int COUNT = 100;
+
+    double insertTimes[SETS];
+    double traverseTimes[SETS];
+
+    cout << left
+         << setw(8)  << "  Set# "
+         << setw(24) << "Time for Insertions"
+         << setw(24) << "Time for Inorder Trav." << endl;
+    printSeparator('-');
+
+    for (int s = 0; s < SETS; s++) {
+        // Generate 100 random numbers
+        int nums[COUNT];
+        for (int i = 0; i < COUNT; i++)
+            nums[i] = rand() % 10000 + 1;
+
+        BST bst;
+        long long startIns = getTimeNs();
+        for (int i = 0; i < COUNT; i++)
+            bst.insert(nums[i]);
+        long long endIns = getTimeNs();
+        insertTimes[s] = (double)(endIns - startIns);
+
+        long long startTrav = getTimeNs();
+        vector<int> result = bst.inorder();
+        long long endTrav = getTimeNs();
+        traverseTimes[s] = (double)(endTrav - startTrav);
+
+        cout << left
+             << setw(8)  << ("  " + to_string(s+1))
+             << setw(24) << (to_string((long long)insertTimes[s])  + " ns")
+             << setw(24) << (to_string((long long)traverseTimes[s]) + " ns")
+             << endl;
+    }
+
+    printSeparator('-');
+    double avgIns = 0, avgTrav = 0;
+    for (int s = 0; s < SETS; s++) {
+        avgIns  += insertTimes[s];
+        avgTrav += traverseTimes[s];
+    }
+    avgIns  /= SETS;
+    avgTrav /= SETS;
+
+    cout << left
+         << setw(8)  << "  Avg"
+         << setw(24) << (to_string((long long)avgIns)  + " ns")
+         << setw(24) << (to_string((long long)avgTrav) + " ns")
+         << endl;
+    printSeparator('=');
+
+    cout << "\nNote: Times measured using clock_gettime " << endl;
+    cout << "      100 random integers in range [1, 10000] per set." << endl;
+
+    return 0;
+}
