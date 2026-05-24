@@ -1,0 +1,158 @@
+#include <iostream>
+#include <vector>
+#include <string>
+using namespace std;
+
+// Recursive flood fill to count white cells in one area
+int countArea(vector<vector<char>>& grid, int r, int c) {
+    // Out-of-bounds checks are omitted because the (n+2)x(n+2) black frame
+    // naturally stops the recursion before it ever leaves the array bounds
+    if (grid[r][c] != 'w')
+        return 0;
+
+    grid[r][c] = 'v';
+    int count = 1;
+
+    count += countArea(grid, r - 1, c); 
+    count += countArea(grid, r + 1, c); 
+    count += countArea(grid, r, c - 1); 
+    count += countArea(grid, r, c + 1); 
+
+    return count;
+}
+
+void solveGrid(vector<string> inputGrid, string label) {
+    int n = inputGrid.size();
+    int N = n + 2;
+    vector<vector<char>> grid(N, vector<char>(N, 'b'));
+
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            grid[i + 1][j + 1] = inputGrid[i][j];
+        }
+    }
+
+    cout << "------------------------------------------------------------" << endl;
+    cout << "  " << label << " (" << n << "x" << n << " grid)" << endl;
+    cout << "------------------------------------------------------------" << endl;
+
+    cout << "  Grid with border frame (" << N << "x" << N << "):" << endl;
+    for (int i = 0; i < N; i++) {
+        cout << "  ";
+        for (int j = 0; j < N; j++) {
+            cout << grid[i][j] << " ";
+        }
+        cout << endl;
+    }
+    cout << endl;
+
+    
+    vector<int> areas;
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= n; j++) {
+            if (grid[i][j] == 'w') {
+                int size = countArea(grid, i, j);
+                areas.push_back(size);
+            }
+        }
+    }
+
+    cout << "  Number of white areas: " << areas.size() << endl;
+    cout << "  Area sizes: ";
+    for (int i = 0; i < (int)areas.size(); i++) {
+        cout << areas[i];
+        if (i < (int)areas.size() - 1) cout << ", ";
+    }
+    cout << endl;
+
+    int total = 0;
+    for (int a : areas) total += a;
+    cout << "  Total white cells: " << total << endl;
+    cout << "------------------------------------------------------------" << endl;
+    cout << endl;
+}
+
+int main() {
+    cout << "============================================================" << endl;
+    cout << "       WHITE AREAS IN N x N GRID                            " << endl;
+    cout << "============================================================" << endl;
+    cout << endl;
+
+    // ------ Example 1: 8x8 Chessboard ------
+    {
+        int n = 8;
+        vector<vector<char>> chessMatrix(n, vector<char>(n, 'b'));
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                if ((i + j) % 2 == 0) {
+                    chessMatrix[i][j] = 'w';
+                }
+            }
+        }
+
+        // Safe conversion to string vectors to eliminate any memoryleakage issues
+        vector<string> chess(n, "");
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                chess[i] += chessMatrix[i][j];
+            }
+        }
+
+        solveGrid(chess, "Example 1: 8x8 Chessboard (should have 32 one-cell white areas)");
+    }
+
+    // ------ Example 2: ------
+    // 8x8 grid with 5 white areas of sizes: 1, 3, 21, 10, 2 
+    {
+        vector<string> figB = {
+            "bwbwbwbw",
+            "bbbbbwwb",
+            "bwwbbwwb",
+            "bwbwbbww",
+            "bwbwwwbb",
+            "bwbwwwbb",
+            "bwbbbwwb",
+            "bwbbbwwb"
+        };
+        solveGrid(figB, "Example 2: Custom 8x8 Grid");
+    }
+
+    // ------ Example 3: Small 4x4 custom grid ------
+    {
+        vector<string> small = {
+            "wbww",
+            "wbwb",
+            "wwbb",
+            "bwww"
+        };
+        solveGrid(small, "Example 3: 4x4 Custom Grid");
+    }
+
+    // ------ Example 4: All white ------
+    {
+        vector<string> allWhite = {
+            "www",
+            "www",
+            "www"
+        };
+        solveGrid(allWhite, "Example 4: 3x3 All White (should be 1 area of 9 cells)");
+    }
+
+    // ------ Example 5:  ------
+    {
+        
+        vector<string> figAssign = {
+            "bwbwbwbw",
+            "bbbbbwwb",
+            "bwwbbwwb",
+            "bwbwbbww",
+            "bwbwwwbb",
+            "bwbwwwbb",
+            "bwbbbwwb",
+            "bwbbbwwb"
+        };
+        solveGrid(figAssign, "Example 5: Assignment Figure (b) exact verification");
+    }
+
+    return 0;
+}
