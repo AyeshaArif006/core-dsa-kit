@@ -1,0 +1,591 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <sstream>
+#include <fstream>
+
+using namespace std;
+// ============================================================================
+// CUSTOM DATA STRUCTURE
+// ============================================================================
+struct LineNode {
+    string text;
+    LineNode* prev;
+    LineNode* next;
+
+    LineNode(string txt) : text(txt), prev(nullptr), next(nullptr) {}
+};
+
+class TextBuffer {
+private:
+    LineNode* head;
+    LineNode* tail;
+    int lineCount;
+
+public:
+    TextBuffer() : head(nullptr), tail(nullptr), lineCount(0) {}
+
+    ~TextBuffer() {
+        clear();
+    }
+
+    void clear() {
+        LineNode* current = head;
+        while (current != nullptr) {
+            LineNode* nextNode = current->next;
+            delete current;
+            current = nextNode;
+        }
+        head = tail = nullptr;
+        lineCount = 0;
+    }
+
+    int getLineCount() const { return lineCount; }
+    LineNode* getHead() const { return head; }
+
+    void appendLine(string txt) {
+        LineNode* newNode = new LineNode(txt);
+        if (!head) {
+            head = tail = newNode;
+        } else {
+            tail->next = newNode;
+            newNode->prev = tail;
+            tail = newNode;
+        }
+        lineCount++;
+    }
+
+    bool insertNewLineNode(int index, string txt) {
+        if (index < 0 || index > lineCount) return false;
+        if (index == lineCount) {
+            appendLine(txt);
+            return true;
+        }
+
+        LineNode* newNode = new LineNode(txt);
+        if (index == 0) {
+            newNode->next = head;
+            head->prev = newNode;
+            head = newNode;
+        } else {
+            LineNode* curr = head;
+            for (int i = 0; i < index; i++) curr = curr->next;
+            
+            newNode->prev = curr->prev;
+            newNode->next = curr;
+            curr->prev->next = newNode;
+            curr->prev = newNode;
+        }
+        lineCount++;
+        return true;
+    }
+
+    bool deleteLineNode(int index) {
+        if (index < 0 || index >= lineCount || !head) return false;
+
+        LineNode* curr = head;
+        for (int i = 0; i < index; i++) curr = curr->next;
+
+        if (curr == head && curr == tail) {
+            head = tail = nullptr;
+        } else if (curr == head) {
+            head = head->next;
+            head->prev = nullptr;
+        } else if (curr == tail) {
+            tail = tail->prev;
+            tail->next = nullptr;
+        } else {
+            curr->prev->next = curr->next;
+            curr->next->prev = curr->prev;
+        }
+
+        delete curr;
+        lineCount--;
+        return true;
+    }
+
+    string* getLineString(int index) {
+        if (index < 0 || index >= lineCount) return nullptr;
+        LineNode* curr = head;
+        for (int i = 0; i < index; i++) curr = curr->next;
+        return &(curr->text);
+    }
+};
+
+// ============================================================================
+// TEXT EDITOR CONTROLLER
+// ============================================================================
+class TextEditor {
+private:
+    TextBuffer buffer;
+    string currentFile;
+    string recentFiles[5];
+    int recentCount;
+
+    string textColor;
+    string textFont;
+    int textSize;
+    bool wordWrap;
+
+    int currentPage;
+    const int LINES_PER_PAGE = 5;
+
+    vector<string> fontList = {"Arial", "Times New Roman", "Courier New", "Verdana", "Calibri"};
+    vector<int> sizeList = {8, 10, 12, 14, 16, 18, 20, 24, 28, 32};
+
+    void addToRecent(string filename) {
+        for (int i = 0; i < recentCount; i++) {
+            if (recentFiles[i] == filename) return;
+        }
+        for (int i = 4; i > 0; i--) {
+            recentFiles[i] = recentFiles[i - 1];
+        }
+        recentFiles[0] = filename;
+        if (recentCount < 5) recentCount++;
+    }
+
+    string applyWordWrap(const string& text, int width = 60) {
+        if (!wordWrap || (int)text.size() <= width) return text;
+        string result = "";
+        int pos = 0;
+        while (pos < (int)text.size()) {
+            result += text.substr(pos, width);
+            pos += width;
+            if (pos < (int)text.size()) result += "\n      ";
+        }
+        return result;
+    }
+
+public:
+    TextEditor() : currentFile(""), recentCount(0), textColor("Default Black"),
+                   textFont("Arial"), textSize(12), wordWrap(false), currentPage(0) {}
+
+    // --- PART A: FILE SYSTEM INTERFACES ---
+    void newFile() {
+        buffer.clear();
+        currentFile = "Untitled.txt";
+        currentPage = 0;
+        cout << "Success: Created a new empty document.\n";
+    }
+
+    void openFile(string filename) {
+        ifstream file(filename);
+        if (!file) {
+            cout << " Error: File could not be opened or found.\n";
+            return;
+        }
+        buffer.clear();
+        string line;
+        while (getline(file, line)) {
+            buffer.appendLine(line);
+        }
+        file.close();
+        currentFile = filename;
+        addToRecent(filename);
+        currentPage = 0;
+        cout << "Success: File \"" << filename << "\" loaded into Linked List memory.\n";
+    }
+
+    void saveFile() {
+        if (currentFile.empty() || currentFile == "Untitled.txt") {
+            cout << "Enter target filename to save: ";
+            cin >> currentFile;
+        }
+        ofstream file(currentFile);
+        LineNode* curr = buffer.getHead();
+        while (curr != nullptr) {
+            file << curr->text << "\n";
+            curr = curr->next;
+        }
+        file.close();
+        addToRecent(currentFile);
+        cout << " Success: Document saved securely to: " << currentFile << "\n";
+    }
+
+    void saveAs(string newName) {
+        currentFile = newName;
+        saveFile();
+    }
+
+    void closeFile() {
+        cout << " Closing file buffer: " << (currentFile.empty() ? "None" : currentFile) << "\n";
+        buffer.clear();
+        currentFile = "";
+        currentPage = 0;
+    }
+
+    void viewRecentFiles() {
+        cout << "\n=== RECENTLY ACCESSED FILES ===\n";
+        if (recentCount == 0) {
+            cout << "  (No recent files logged)\n";
+        } else {
+            for (int i = 0; i < recentCount; i++) {
+                cout << "  [" << (i + 1) << "] " << recentFiles[i] << "\n";
+            }
+        }
+    }
+
+    // --- PART B: TEXT INTERACTIVE EDITING SYSTEMS ---
+    void startInteractiveTyping() {
+        if (currentFile.empty()) {
+            currentFile = "Untitled.txt";
+        }
+        cout << "\n=== CONTINUOUS TYPING MODE ACTIVE ===\n";
+        cout << "* Every time you press [Enter], a new paragraph node is created.\n";
+        cout << "* To STOP typing and return to the main menu, type 'END' on a fresh blank line.\n";
+        cout << "--------------------------------------------------\n";
+        
+        string inputLine;
+        while (true) {
+            getline(cin, inputLine);
+            if (inputLine == "END") {
+                break;
+            }
+            buffer.appendLine(inputLine);
+        }
+        cout << "Continuous stream typing exited. Changes saved to working memory.\n";
+    }
+
+    void insertTextInline(int lineIdx, int stringPos, string content) {
+        string* lineStr = buffer.getLineString(lineIdx);
+        if (!lineStr) {
+            cout << " Error: Target line index does not exist.\n";
+            return;
+        }
+        if (stringPos < 0 || stringPos > (int)lineStr->size()) {
+            stringPos = lineStr->size(); 
+        }
+        lineStr->insert(stringPos, content);
+        cout << " Characters injected into paragraph successfully.\n";
+    }
+
+    void deleteTextInline(int lineIdx, int stringPos, int length) {
+        string* lineStr = buffer.getLineString(lineIdx);
+        if (!lineStr) {
+            cout << " Error: Target line index does not exist.\n";
+            return;
+        }
+        if (stringPos < 0 || stringPos >= (int)lineStr->size()) {
+            cout << " Error: Character position column out of bounds.\n";
+            return;
+        }
+        lineStr->erase(stringPos, length);
+        cout << " Substring data successfully erased from line.\n";
+    }
+
+    void insertNewParagraph(int lineIdx, string content) {
+        if (buffer.insertNewLineNode(lineIdx, content)) {
+            cout << " Success: Inserted a complete new paragraph block at row " << (lineIdx + 1) << ".\n";
+        } else {
+            cout << " Error: Invalid paragraph insertion row bounds.\n";
+        }
+    }
+
+    void deleteWholeParagraph(int lineIdx) {
+        if (buffer.deleteLineNode(lineIdx)) {
+            cout << "Success: Completely deleted paragraph block " << (lineIdx + 1) << ".\n";
+        } else {
+            cout << " Error: Cannot find target paragraph row index to delete.\n";
+        }
+    }
+
+    void findAndReplace(string searchTarget, string replacePayload) {
+        int counts = 0;
+        LineNode* curr = buffer.getHead();
+        while (curr != nullptr) {
+            size_t foundPos = 0;
+            while ((foundPos = curr->text.find(searchTarget, foundPos)) != string::npos) {
+                curr->text.replace(foundPos, searchTarget.size(), replacePayload);
+                foundPos += replacePayload.size();
+                counts++;
+            }
+            curr = curr->next;
+        }
+        cout << " Find/Replace complete. Swapped " << counts << " instances.\n";
+    }
+
+    void changeColor(int selection) {
+        switch(selection) {
+            case 1: textColor = "Red"; break;
+            case 2: textColor = "Blue"; break;
+            case 3: textColor = "Green"; break;
+            default: textColor = "Default Black";
+        }
+        cout << " Text layout updated color context to: " << textColor << "\n";
+    }
+
+    void displayFonts() {
+        cout << "Available choices: [1] Arial | [2] Times New Roman | [3] Courier New | [4] Verdana\n";
+    }
+
+    void changeFont(int selection) {
+        if (selection >= 1 && selection <= (int)fontList.size()) {
+            textFont = fontList[selection - 1];
+            cout << ">> Font configuration updated to: " << textFont << "\n";
+        } else {
+            cout << "Out of selection limits, defaults maintained.\n";
+        }
+    }
+
+    void displaySizes() {
+        cout << "Available choices: [1] 10pt | [2] 12pt | [3] 14pt | [4] 16pt | [5] 20pt\n";
+    }
+
+    void changeSize(int selection) {
+        if (selection >= 1 && selection <= (int)sizeList.size()) {
+            textSize = sizeList[selection - 1];
+            cout << " Text font scaling size set to: " << textSize << "pt\n";
+        }
+    }
+
+    void toggleWordWrap() {
+        wordWrap = !wordWrap;
+        cout << " Word-wrap rules updated -> Global state: " << (wordWrap ? "ON" : "OFF") << "\n";
+    }
+
+    void keyPageUp() {
+        if (currentPage > 0) {
+            currentPage--;
+            cout << " Paged Up. Active Viewport Page: " << (currentPage + 1) << "\n";
+        } else {
+            cout << "Boundary reached: Already showing top of the file.\n";
+        }
+    }
+
+    void keyPageDown() {
+        int totalPages = (buffer.getLineCount() + LINES_PER_PAGE - 1) / LINES_PER_PAGE;
+        if (totalPages == 0) 
+            totalPages = 1;
+        if (currentPage < totalPages - 1) {
+            currentPage++;
+            cout << " Paged Down. Active Viewport Page: " << (currentPage + 1) << "\n";
+        } else {
+            cout << " Boundary reached: Already viewing final page frames.\n";
+        }
+    }
+
+    void keyHome() {
+        currentPage = 0;
+        cout << " Viewport pointer snapped directly to Page 1.\n";
+    }
+
+    void keyEnd() {
+        int totalPages = (buffer.getLineCount() + LINES_PER_PAGE - 1) / LINES_PER_PAGE;
+        currentPage = max(0, totalPages - 1);
+        cout << " Viewport jumped immediately to the absolute last page.\n";
+    }
+
+    void selectAll() {
+        cout << "\n=== [SELECT ALL ACTION] SYSTEM DATA BUFFER STREAM DUMP ===\n";
+        LineNode* curr = buffer.getHead();
+        int counter = 1;
+        while(curr != nullptr) {
+            cout << "  [Paragraph Node " << counter++ << "]: " << curr->text << "\n";
+            curr = curr->next;
+        }
+        cout << "========================================================\n";
+    }
+
+    // Interactive UI Renderer Frame
+    void renderUI() {
+        cout << "\n========================================================================\n";
+        cout << "\n FILE SCREEN AREA UI | OPEN DATA STRUCTURE OBJECT: " << (currentFile.empty() ? "(None Open)" : currentFile) << "\n";
+        cout << "  Active Layout Metas: Font=" << textFont << " | Size=" << textSize << "pt | Color=" << textColor << "\n";
+        cout << "  Word Wrapping Constraints Evaluation Directives: " << (wordWrap ? "TRUE" : "FALSE") << "\n";
+        cout << "------------------------------------------------------------------------\n";
+
+        if (buffer.getLineCount() == 0) {
+            cout << "   [ Blank Document Canvas Workspace - Linked List has 0 nodes ]\n";
+        } else {
+            int startIdx = currentPage * LINES_PER_PAGE;
+            LineNode* curr = buffer.getHead();
+            
+            for (int i = 0; i < startIdx && curr != nullptr; i++) {
+                curr = curr->next;
+            }
+
+            for (int i = 0; i < LINES_PER_PAGE && curr != nullptr; i++) {
+                cout << "  [P" << (startIdx + i + 1) << "] | " << applyWordWrap(curr->text) << "\n";
+                curr = curr->next;
+            }
+            
+            int totalPages = (buffer.getLineCount() + LINES_PER_PAGE - 1) / LINES_PER_PAGE;
+            if (totalPages == 0) totalPages = 1;
+            cout << "\n  --- [ Scroll-Bar Visual Track ] ---------- [ Page: " << (currentPage + 1) << " of " << totalPages << " ] ---\n";
+        }
+        cout << "========================================================================\n";
+    }
+};
+
+int main() {
+    TextEditor editor;
+    int choice = 0;
+
+    cout << "============================================================" << endl;
+    cout << "                      TEXT EDITOR                           " << endl;
+    cout << "============================================================" << endl;
+
+    while (true) {
+        editor.renderUI();
+        cout << "\n      MASTER INTERACTION TERMINAL SELECTION LAYER:\n";
+        cout << " [1] File Primitives Category Submenu (New, Open, Save, Close, History)\n";
+        cout << " [2] Type / Insert Live Text Paragraph Blocks (Continuous Stream)\n";
+        cout << " [3] Inline Core Editing Actions (Slice Characters / Erase Words)\n";
+        cout << " [4] Node Control Structural Changes (Insert New Para / Delete Entire Para)\n";
+        cout << " [5] Search & Global Transform Expressions (Find & Replace)\n";
+        cout << " [6] Font Styles & Packaging Adjustments (Font family, Text scales, Color contexts)\n";
+        cout << " [7] Emulate Hardware Special Keyboard Interactions (PageUp, Home, End)\n";
+        cout << " [8] Execute Select-All Complete Payload Dump\n";
+        cout << " [9] Safely Close Framework Instances and Exit\n";
+        cout << "Select Target System Directive Index (1-9): ";
+        
+        if (!(cin >> choice)) {
+            cin.clear();
+            string junk;
+            cin >> junk;
+            cout << "Error: Unparseable instruction input character format. Retry.\n";
+            continue;
+        }
+
+        if (choice == 9) {
+            editor.closeFile();
+            cout << "\nDisposing runtime data streams. Editor application instance closed.\n";
+            break;
+        }
+
+        switch (choice) {
+            case 1: { // File Actions Submenu
+                cout << "\n--- SUBMENU DIRECTIVES: FILE SYSTEM ACTIONS ---\n";
+                cout << " 1. Clear Active Buffer and Create Blank File Workspace (New File)\n";
+                cout << " 2. Parse Disk Text File Content Straight into Linked List RAM (Open File)\n";
+                cout << " 3. Save Active Strings Structures onto Disk Namespace (Save)\n";
+                cout << " 4. Save Copy Target To Distinct Namespace Target (Save As)\n";
+                cout << " 5. Erase Active Nodes Context Lifespans Safely (Close File)\n";
+                cout << " 6. Output Recent Array History Log Collection Paths (View Recent Files)\n";
+                cout << "Choose Command Operation Index (1-6): ";
+                int sub; cin >> sub;
+                if (sub == 1) editor.newFile();
+                else if (sub == 2) {
+                    string fn; 
+                    cout << "Enter exact file target path string name: ";
+                    cin >> fn; editor.openFile(fn);
+                }
+                else if (sub == 3) editor.saveFile();
+                else if (sub == 4) {
+                    string fn; 
+                    cout << "Enter unique new namespace string identifier descriptor: ";
+                    cin >> fn; editor.saveAs(fn);
+                }
+                else if (sub == 5) editor.closeFile();
+                else if (sub == 6) editor.viewRecentFiles();
+                break;
+            }
+            case 2: { 
+                cin.ignore(); 
+                editor.startInteractiveTyping();
+                break;
+            }
+            case 3: { 
+                cout << "\n--- SUBMENU DIRECTIVES: INLINE CHARACTER ROW STRING SLICES ---\n";
+                cout << " 1. Inject / Blend character strings inline at exact coordinate points\n";
+                cout << " 2. Erase / Wipe specified text length sequence slices out of a row\n";
+                cout << "Choose Action Strategy Index (1-2): ";
+                int sub; 
+                cin >> sub;
+                if (sub == 1) {
+                    int row, col; string payload;
+                    cout << "Target Paragraph Number Row Index (1-based index numbering): "; cin >> row;
+                    cout << "Target Column Character Horizontal position index mapping: "; cin >> col;
+                    cout << "Enter text to insert inline inside paragraph node string: ";
+                    cin.ignore(); 
+                    getline(cin, payload);
+                    editor.insertTextInline(row - 1, col, payload);
+                } else if (sub == 2) {
+                    int row, col, length;
+                    cout << "Target Paragraph Number Row Index (1-based tracking numbering): "; cin >> row;
+                    cout << "Target Column Character position metric tracking boundary point: "; cin >> col;
+                    cout << "Total character counting units value constraint length to erase: "; cin >> length;
+                    editor.deleteTextInline(row - 1, col, length);
+                }
+                break;
+            }
+            case 4: { 
+                cout << "\n--- SUBMENU DIRECTIVES: NODE-LEVEL LIST ALTERATIONS ---\n";
+                cout << " 1. Add/Insert a whole new empty or initial text paragraph node anywhere\n";
+                cout << " 2. Completely eliminate/wipe an entire paragraph node out of the document\n";
+                cout << "Choose Structural Action (1-2): ";
+                int sub; 
+                cin >> sub;
+                if (sub == 1) {
+                    int row; 
+                    string payload;
+                    cout << "At what position row index do you want to inject the new paragraph? (1-based index numbering): "; cin >> row;
+                    cout << "Enter the text content for this new paragraph node: ";
+                    cin.ignore(); 
+                    getline(cin, payload);
+                    editor.insertNewParagraph(row - 1, payload);
+                } else if (sub == 2) {
+                    int row;
+                    cout << "Specify row number paragraph node index to isolate and completely destroy (1-based index numbering): "; cin >> row;
+                    editor.deleteWholeParagraph(row - 1);
+                }
+                break;
+            }
+            case 5: { 
+                string findWhat, replaceWith;
+                cout << "\nEnter exact character text sequence query pattern literal expression to find: ";
+                cin.ignore(); getline(cin, findWhat);
+                cout << "Enter literal replacement string token values to safely swap into matching fragments: ";
+                getline(cin, replaceWith);
+                editor.findAndReplace(findWhat, replaceWith);
+                break;
+            }
+            case 6: { 
+                cout << "\n--- SUBMENU DIRECTIVES: STRUCTURAL LAYOUT PRESENTATION PROPERTIES ---\n";
+                cout << " 1. Apply visual theme display colors contexts profiles configurations\n";
+                cout << " 2. Shift text typography properties meta definitions (Fonts)\n";
+                cout << " 3. Alter font sizing points constraints metric values configurations\n";
+                cout << " 4. Toggle global formatting rule constraints processors: Word-Wrapping engine\n";
+                cout << "Choose Action Selection Index (1-4): ";
+                int sub; cin >> sub;
+                if (sub == 1) {
+                    cout << "Color schemes: [1] Cardinal Red | [2] Oceanic Blue | [3] Forest Green | [4] Reset Defaults\nSelect option number: ";
+                    int flag; cin >> flag; editor.changeColor(flag);
+                } else if (sub == 2) {
+                    editor.displayFonts(); cout << "Select option index code: ";
+                    int flag; cin >> flag; editor.changeFont(flag);
+                } else if (sub == 3) {
+                    editor.displaySizes(); cout << "Select configuration value constraint option index pointer: ";
+                    int flag; cin >> flag; editor.changeSize(flag);
+                } else if (sub == 4) {
+                    editor.toggleWordWrap();
+                }
+                break;
+            }
+            case 7: { 
+                cout << "\n--- INTERACTIVE DEVICE KEYBOARD EMULATOR ACTION SIMULATIONS SUBMENU ---\n";
+                cout << " 1. Simulate device hardware keyboard keystroke trigger signal: [ PageUp Key ]\n";
+                cout << " 2. Simulate device hardware keyboard keystroke trigger signal: [ PageDown Key ]\n";
+                cout << " 3. Simulate device hardware keyboard keystroke trigger signal: [ Home Key ]\n";
+                cout << " 4. Simulate device hardware keyboard keystroke trigger signal: [ End Key ]\n";
+                cout << "Choose Key Event Action Index (1-4): ";
+                int sub; 
+                cin >> sub;
+                if (sub == 1) editor.keyPageUp();
+                else if (sub == 2) editor.keyPageDown();
+                else if (sub == 3) editor.keyHome();
+                else if (sub == 4) editor.keyEnd();
+                break;
+            }
+            case 8: { 
+                editor.selectAll();
+                break;
+            }
+            default: {
+                cout << " Target selection code does not exist within MASTER INTERACTION LAYER MENU options mapping parameters.\n";
+            }
+        }
+    }
+    return 0;
+}
